@@ -233,6 +233,39 @@ header.top h1 span{ color:var(--paper); }
   color:var(--mustard);
 }
 
+.reserve-row{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  background:rgba(58,40,23,0.5);
+  border:1px solid #443a29;
+  border-radius:8px;
+  padding:12px 18px;
+  margin-bottom:12px;
+  font-family:'JetBrains Mono', monospace;
+}
+.reserve-check{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:var(--paper-dim);
+  font-size:13px;
+  letter-spacing:1px;
+  cursor:pointer;
+  user-select:none;
+}
+.reserve-check input{
+  width:18px;
+  height:18px;
+  accent-color:var(--mustard);
+  cursor:pointer;
+}
+.reserve-time{
+  width:auto;
+  flex:0 0 auto;
+}
+.reserve-time:disabled{ opacity:.4; cursor:not-allowed; }
+
 .grid{
   display:grid;
   grid-template-columns: 1.3fr 1fr;
@@ -1275,6 +1308,14 @@ header.top h1 span{ color:var(--paper); }
     <div id="receiptLines"></div>
   </div>
 
+  <div class="reserve-row">
+    <label class="reserve-check">
+      <input type="checkbox" id="reserveCheck">
+      <span>予約品</span>
+    </label>
+    <input type="time" id="reserveTime" class="event-input reserve-time" disabled>
+  </div>
+
   <div class="confirm-wrap">
     <div class="order-total-row">
       <span class="label">合計</span>
@@ -1510,6 +1551,9 @@ let cashReceived = 0;
 let currentOrderTotal = 0;
 let eventWeather = ""; // "sunny" | "cloudy" | "showers" | "rainy"
 let eventNote = ""; // その日の状況(自由記入)
+let isReserved = false; // 現在の注文が予約品かどうか
+let reserveTime = ""; // 予約時間(現在の注文用)
+let reservationLog = []; // 本日確定した予約品ログ { time, items }
 
 const yen = n => "¥" + n.toLocaleString("ja-JP");
 const escapeHtml = s => s.replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -1550,7 +1594,8 @@ function saveSalesState(){
       expenseOther,
       eventInfo,
       eventWeather,
-      eventNote
+      eventNote,
+      reservationLog
     }));
   } catch (e){
     console.error("保存に失敗しました", e);
@@ -1577,6 +1622,7 @@ function loadSalesState(){
     if (typeof data.eventInfo === "string") eventInfo = data.eventInfo;
     if (typeof data.eventWeather === "string") eventWeather = data.eventWeather;
     if (typeof data.eventNote === "string") eventNote = data.eventNote;
+    if (Array.isArray(data.reservationLog)) reservationLog = data.reservationLog;
   } catch (e){
     console.error("読み込みに失敗しました", e);
   }
@@ -1604,6 +1650,7 @@ document.getElementById("resetModalConfirm").addEventListener("click", () => {
   eventInfo = "";
   eventWeather = "";
   eventNote = "";
+  reservationLog = [];
   document.getElementById("eventInfo").value = "";
   document.getElementById("eventNote").value = "";
   renderWeatherSelect();
@@ -1968,33 +2015,49 @@ document.getElementById("correctBtn").addEventListener("click", () => {
 document.getElementById("confirmBtn").addEventListener("click", () => {
   let total = 0;
   let hasItems = false;
+  let itemSummary = [];
 
   menu.forEach((item, i) => {
     if (counts[i] > 0){
       total += item.price * counts[i];
       burgerSalesCount[i] += counts[i];
       hasItems = true;
+      itemSummary.push(`${item.name}×${counts[i]}`);
     }
   });
   toppings.forEach((item, i) => {
     if (toppingCounts[i] > 0){
       total += item.price * toppingCounts[i];
       hasItems = true;
+      itemSummary.push(`${item.name}×${toppingCounts[i]}`);
     }
   });
   customItems.forEach(item => {
     total += item.price;
     hasItems = true;
+    itemSummary.push(item.name);
   });
   if (!hasItems) return;
 
   todaySales += total;
+
+  if (isReserved && reserveTime){
+    reservationLog.push({ time: reserveTime, items: itemSummary.join(", ") });
+  }
 
   counts = menu.map(() => 0);
   toppingCounts = toppings.map(() => 0);
   customItems = [];
   cashReceived = 0;
   document.getElementById("cashReceived").value = "";
+
+  isReserved = false;
+  reserveTime = "";
+  const reserveCheckEl = document.getElementById("reserveCheck");
+  const reserveTimeEl = document.getElementById("reserveTime");
+  reserveCheckEl.checked = false;
+  reserveTimeEl.value = "";
+  reserveTimeEl.disabled = true;
 
   renderMenu();
   renderToppings();
@@ -2022,6 +2085,21 @@ document.getElementById("customItemAdd").addEventListener("click", () => {
   nameEl.value = "";
   priceEl.value = "";
   renderReceipt();
+});
+
+// ---------- 予約品 ----------
+const reserveCheckEl = document.getElementById("reserveCheck");
+const reserveTimeEl = document.getElementById("reserveTime");
+reserveCheckEl.addEventListener("change", () => {
+  isReserved = reserveCheckEl.checked;
+  reserveTimeEl.disabled = !isReserved;
+  if (!isReserved){
+    reserveTime = "";
+    reserveTimeEl.value = "";
+  }
+});
+reserveTimeEl.addEventListener("input", () => {
+  reserveTime = reserveTimeEl.value;
 });
 
 renderMenu();
@@ -2161,6 +2239,14 @@ function buildMailBody(){
     }
   });
 
+  if (reservationLog.length > 0){
+    lines.push("");
+    lines.push("--- 予約品 ---");
+    reservationLog.forEach(r => {
+      lines.push(`${r.time} - ${r.items}`);
+    });
+  }
+
   return lines.join("\n");
 }
 
@@ -2194,6 +2280,14 @@ function buildExcelBlob(){
   rows.push(["粗利(円)", totalProfit]);
   const finalProfitRowIndex = rows.length;
   rows.push(["最終利益(円)", finalProfit]);
+
+  if (reservationLog.length > 0){
+    rows.push([]);
+    rows.push(["予約時間", "商品"]);
+    reservationLog.forEach(r => {
+      rows.push([r.time, r.items]);
+    });
+  }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [{ wch: 26 }, { wch: 14 }];
