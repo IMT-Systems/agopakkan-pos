@@ -409,6 +409,39 @@ header.top h1 span{ color:var(--paper); }
 .topping-grid .stepper .plus{ background:var(--lettuce); }
 .topping-grid .stepper .plus:hover{ background:#D69433; }
 
+.custom-item-board{
+  margin-top:16px;
+  padding-top:16px;
+  border-top:1px dashed #443a29;
+}
+.custom-item-label{
+  font-family:'JetBrains Mono', monospace;
+  font-size:12px;
+  letter-spacing:1px;
+  color:var(--paper-dim);
+  opacity:.75;
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+.custom-item-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.custom-item-name{ flex:1; min-width:140px; }
+.custom-item-price{ width:110px; }
+.custom-remove{
+  background:none;
+  border:none;
+  color:var(--ketchup);
+  font-weight:700;
+  font-size:14px;
+  cursor:pointer;
+  margin-left:8px;
+  padding:0 2px;
+}
+
 .item-row{
   display:grid;
   grid-template-columns: 1fr auto;
@@ -900,6 +933,7 @@ header.top h1 span{ color:var(--paper); }
 }
 .event-input:focus{ outline:2px solid var(--mustard); }
 .event-input::placeholder{ color:var(--paper-dim); opacity:.5; }
+.event-note{ resize:vertical; min-height:64px; font-family:'Space Grotesk', sans-serif; line-height:1.5; }
 
 .weather-select{
   display:grid;
@@ -1226,6 +1260,15 @@ header.top h1 span{ color:var(--paper); }
       <span class="menu-cat-arrow">▸</span> TOPPING
     </button>
     <div class="menu-cat-grid topping-grid" id="toppingList" style="display:none;"></div>
+
+    <div class="custom-item-board">
+      <div class="custom-item-label">＋ カスタム商品(自由入力)</div>
+      <div class="custom-item-row">
+        <input type="text" id="customItemName" class="event-input custom-item-name" placeholder="商品名を入力">
+        <input type="number" id="customItemPrice" class="expense-input custom-item-price" min="0" inputmode="numeric" placeholder="金額">
+        <button type="button" class="correct-btn" id="customItemAdd">追加</button>
+      </div>
+    </div>
   </div>
 
   <div class="receipt" id="receipt">
@@ -1345,6 +1388,10 @@ header.top h1 span{ color:var(--paper); }
         </button>
       </div>
     </div>
+    <div class="event-field">
+      <label class="expense-label" for="eventNote">その日の状況</label>
+      <textarea id="eventNote" class="event-input event-note" rows="3" placeholder="例:客足、気温、トラブルなど自由に記入"></textarea>
+    </div>
   </div>
 
   <div class="pdf-wrap">
@@ -1441,10 +1488,17 @@ const toppings = [
   { name: "パティー",         price: 500 },
   { name: "ハラペーニョ",     price: 200 },
   { name: "しいたけ",         price: 300 },
+  { name: "マスタード抜き",   price: 0 },
+  { name: "マヨネーズ抜き",   price: 0 },
+  { name: "ケチャップ抜き",   price: 0 },
+  { name: "レタス抜き",       price: 0 },
+  { name: "トマト抜き",       price: 0 },
+  { name: "パティ抜き",       price: 0 },
 ];
 
 let counts = menu.map(() => 0);
 let toppingCounts = toppings.map(() => 0);
+let customItems = []; // 現在の注文に追加したカスタム商品 { name, price }
 let burgerSalesCount = menu.map(() => 0); // 累計販売数(バーガーのみ)
 let todaySales = 0;
 let todayBunCount = 0; // 本日のバンズ数(自由入力)
@@ -1455,8 +1509,10 @@ let eventInfo = "";
 let cashReceived = 0;
 let currentOrderTotal = 0;
 let eventWeather = ""; // "sunny" | "cloudy" | "showers" | "rainy"
+let eventNote = ""; // その日の状況(自由記入)
 
 const yen = n => "¥" + n.toLocaleString("ja-JP");
+const escapeHtml = s => s.replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
 // ---------- PERSISTENCE (localStorage) ----------
 const STORAGE_KEY = "agopakkan_sales_v1";
@@ -1493,7 +1549,8 @@ function saveSalesState(){
       expenseLabor,
       expenseOther,
       eventInfo,
-      eventWeather
+      eventWeather,
+      eventNote
     }));
   } catch (e){
     console.error("保存に失敗しました", e);
@@ -1519,6 +1576,7 @@ function loadSalesState(){
     if (typeof data.expenseOther === "number") expenseOther = data.expenseOther;
     if (typeof data.eventInfo === "string") eventInfo = data.eventInfo;
     if (typeof data.eventWeather === "string") eventWeather = data.eventWeather;
+    if (typeof data.eventNote === "string") eventNote = data.eventNote;
   } catch (e){
     console.error("読み込みに失敗しました", e);
   }
@@ -1545,7 +1603,9 @@ document.getElementById("resetModalConfirm").addEventListener("click", () => {
   burgerSalesCount = menu.map(() => 0);
   eventInfo = "";
   eventWeather = "";
+  eventNote = "";
   document.getElementById("eventInfo").value = "";
+  document.getElementById("eventNote").value = "";
   renderWeatherSelect();
   renderBurgerStats();
   renderSalesChart();
@@ -1731,10 +1791,25 @@ function renderReceipt(){
         </div>`;
     }
   });
+  customItems.forEach((item, ci) => {
+    total += item.price;
+    lines += `
+      <div class="r-line">
+        <span>${escapeHtml(item.name)}</span>
+        <span>${yen(item.price)} <button type="button" class="custom-remove" data-ci="${ci}" aria-label="削除">×</button></span>
+      </div>`;
+  });
 
   linesEl.innerHTML = lines || `<div class="r-empty">商品を選択してください</div>`;
   totalEl.textContent = yen(total);
   btn.disabled = total === 0;
+
+  linesEl.querySelectorAll(".custom-remove").forEach(removeBtn => {
+    removeBtn.addEventListener("click", () => {
+      customItems.splice(Number(removeBtn.dataset.ci), 1);
+      renderReceipt();
+    });
+  });
 
   currentOrderTotal = total;
   renderCashChange();
@@ -1907,12 +1982,17 @@ document.getElementById("confirmBtn").addEventListener("click", () => {
       hasItems = true;
     }
   });
+  customItems.forEach(item => {
+    total += item.price;
+    hasItems = true;
+  });
   if (!hasItems) return;
 
   todaySales += total;
 
   counts = menu.map(() => 0);
   toppingCounts = toppings.map(() => 0);
+  customItems = [];
   cashReceived = 0;
   document.getElementById("cashReceived").value = "";
 
@@ -1928,6 +2008,20 @@ document.getElementById("confirmBtn").addEventListener("click", () => {
   receipt.classList.remove("flash");
   void receipt.offsetWidth;
   receipt.classList.add("flash");
+});
+
+// ---------- CUSTOM ITEM (自由入力) ----------
+document.getElementById("customItemAdd").addEventListener("click", () => {
+  const nameEl = document.getElementById("customItemName");
+  const priceEl = document.getElementById("customItemPrice");
+  const name = nameEl.value.trim();
+  const price = parseInt(priceEl.value, 10);
+  if (!name || isNaN(price) || price <= 0) return;
+
+  customItems.push({ name, price });
+  nameEl.value = "";
+  priceEl.value = "";
+  renderReceipt();
 });
 
 renderMenu();
@@ -2019,6 +2113,13 @@ eventInfoEl.addEventListener("input", () => {
   eventInfo = eventInfoEl.value;
   saveSalesState();
 });
+
+const eventNoteEl = document.getElementById("eventNote");
+eventNoteEl.value = eventNote;
+eventNoteEl.addEventListener("input", () => {
+  eventNote = eventNoteEl.value;
+  saveSalesState();
+});
 weatherButtons.forEach(btn => {
   btn.addEventListener("click", () => {
     eventWeather = (eventWeather === btn.dataset.weather) ? "" : btn.dataset.weather;
@@ -2049,7 +2150,8 @@ function buildMailBody(){
   lines.push("");
   if (eventInfo) lines.push(`イベント名・場所: ${eventInfo}`);
   if (eventWeather) lines.push(`天気: ${WEATHER_LABELS[eventWeather] || eventWeather}`);
-  if (eventInfo || eventWeather) lines.push("");
+  if (eventNote) lines.push(`その日の状況: ${eventNote}`);
+  if (eventInfo || eventWeather || eventNote) lines.push("");
   lines.push(`売上高: ${yen(todaySales)}`);
   lines.push("");
   lines.push("--- バーガー別 販売数 ---");
@@ -2072,6 +2174,7 @@ function buildExcelBlob(){
   const rows = [];
   if (eventInfo) rows.push(["イベント名・場所", eventInfo]);
   if (eventWeather) rows.push(["天気", WEATHER_LABELS[eventWeather] || eventWeather]);
+  if (eventNote) rows.push(["その日の状況", eventNote]);
   if (rows.length > 0) rows.push([]);
 
   rows.push(["商品名", "販売数(個)"]);
@@ -2140,7 +2243,8 @@ function buildSheetPayload(){
     totalCount,
     totalSales: todaySales,
     totalProfit,
-    finalProfit
+    finalProfit,
+    note: eventNote
   };
 }
 
