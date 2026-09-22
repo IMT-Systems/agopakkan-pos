@@ -2231,6 +2231,8 @@ function buildMailBody(){
   if (eventNote) lines.push(`その日の状況: ${eventNote}`);
   if (eventInfo || eventWeather || eventNote) lines.push("");
   lines.push(`売上高: ${yen(todaySales)}`);
+  const totalCount = burgerSalesCount.reduce((sum, n) => sum + n, 0);
+  lines.push(`販売合計個数: ${totalCount} 個`);
   lines.push("");
   lines.push("--- バーガー別 販売数 ---");
   menu.forEach((item, i) => {
