@@ -1966,7 +1966,7 @@ function renderStats(){
 }
 
 function renderBunStats(){
-  const totalCount = burgerSalesCount.reduce((sum, n) => sum + n, 0);
+  const totalCount = getTotalSoldCount();
   const remaining = todayBunCount - totalCount;
   const el = document.getElementById("bunRemaining");
   el.textContent = remaining;
