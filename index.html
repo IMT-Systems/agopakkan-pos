@@ -2250,8 +2250,15 @@ function buildMailBody(){
   if (customSalesLog.length > 0){
     lines.push("");
     lines.push("--- カスタム商品 ---");
+    const customAgg = {};
     customSalesLog.forEach(c => {
-      lines.push(`${c.name}: ${yen(c.price)}`);
+      if (!customAgg[c.name]) customAgg[c.name] = { total: 0, count: 0 };
+      customAgg[c.name].total += c.price;
+      customAgg[c.name].count += 1;
+    });
+    Object.keys(customAgg).forEach(name => {
+      const { total, count } = customAgg[name];
+      lines.push(`${name}: ${yen(total)}: ${count} 個`);
     });
   }
 
