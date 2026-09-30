@@ -1558,6 +1558,9 @@ let customSalesLog = []; // 本日確定したカスタム商品ログ { name, p
 const yen = n => "¥" + n.toLocaleString("ja-JP");
 const escapeHtml = s => s.replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
+// 総販売数 = メニュー登録済みバーガーの販売数 + カスタム商品の確定件数
+const getTotalSoldCount = () => burgerSalesCount.reduce((sum, n) => sum + n, 0) + customSalesLog.length;
+
 // ---------- PERSISTENCE (localStorage) ----------
 const STORAGE_KEY = "agopakkan_sales_v1";
 const UI_STORAGE_KEY = "agopakkan_ui_v1";
@@ -1944,7 +1947,7 @@ function renderSalesChart(){
 
 function renderStats(){
   document.getElementById("totalSales").textContent = yen(todaySales);
-  const totalCount = burgerSalesCount.reduce((sum, n) => sum + n, 0);
+  const totalCount = getTotalSoldCount();
   document.getElementById("totalCount").textContent = totalCount + " 個";
 
   document.getElementById("quickTotalSales").textContent = yen(todaySales);
@@ -2234,7 +2237,7 @@ function buildMailBody(){
   if (eventNote) lines.push(`その日の状況: ${eventNote}`);
   if (eventInfo || eventWeather || eventNote) lines.push("");
   lines.push(`売上高: ${yen(todaySales)}`);
-  const totalCount = burgerSalesCount.reduce((sum, n) => sum + n, 0);
+  const totalCount = getTotalSoldCount();
   lines.push(`販売合計個数: ${totalCount} 個`);
   lines.push("");
   lines.push("--- バーガー別 販売数 ---");
@@ -2345,7 +2348,7 @@ const GAS_TOKEN = "agopakkan-2026-secret";
 const PENDING_QUEUE_KEY = "agopakkan_pending_sheet_v1";
 
 function buildSheetPayload(){
-  const totalCount = burgerSalesCount.reduce((sum, n) => sum + n, 0);
+  const totalCount = getTotalSoldCount();
   const totalCost = menu.reduce((sum, item, i) => sum + item.cost * burgerSalesCount[i], 0);
   const totalProfit = todaySales - totalCost;
   const finalProfit = totalProfit - (expenseBooth + expenseLabor + expenseOther);
