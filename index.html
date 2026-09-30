@@ -1487,6 +1487,13 @@ const menu = [
   { name: "ベリーモッツアレラ",   price: 1500, cat: "single" },
   { name: "ネギバーガー",         price: 1300, cat: "single" },
   { name: "ネギチーズ",           price: 1500, cat: "single" },
+  { name: "しいたけバーガー",     price: 1500, cat: "single" },
+  { name: "しいたけチーズ",       price: 1700, cat: "single" },
+  { name: "しいたけベーコンチーズ", price: 1900, cat: "single" },
+  { name: "ハラペーニョチーズ",             price: 1500, cat: "single" },
+  { name: "ハラペーニョモッツアレラ",       price: 1500, cat: "single" },
+  { name: "エッグベーコンハラペーニョチーズ", price: 1900, cat: "single" },
+  { name: "カリフォルニア",                 price: 1800, cat: "single" },
   // ---- DOUBLE MENU ----
   { name: "ダブル",                       price: 1700, cat: "double" },
   { name: "ダブルチーズ",                 price: 2000, cat: "double" },
@@ -1500,17 +1507,9 @@ const menu = [
   { name: "2種ダブルチーズネギ",          price: 2200, cat: "double" },
   { name: "ダブルネギチーズ",             price: 2200, cat: "double" },
   { name: "トリプル(極)チーズ",           price: 2500, cat: "double" },
-  // ---- TODAY'S MENU (数量限定) ----
-  { name: "しいたけバーガー",     price: 1500, cat: "limited" },
-  { name: "しいたけチーズ",       price: 1700, cat: "limited" },
-  { name: "しいたけベーコンチーズ", price: 1900, cat: "limited" },
-  { name: "ハラペーニョチーズ",             price: 1500, cat: "limited" },
-  { name: "ハラペーニョモッツアレラ",       price: 1500, cat: "limited" },
-  { name: "エッグベーコンハラペーニョチーズ", price: 1900, cat: "limited" },
-  { name: "ダブルチーズハラペーニョ",       price: 2200, cat: "limited" },
-  { name: "ダブルハラペーニョモッツアレラ", price: 2200, cat: "limited" },
-  { name: "2種ダブルハラペーニョエッグベーコンチーズ", price: 2600, cat: "limited" },
-  { name: "カリフォルニア",                 price: 1800, cat: "limited" },
+  { name: "ダブルチーズハラペーニョ",       price: 2200, cat: "double" },
+  { name: "ダブルハラペーニョモッツアレラ", price: 2200, cat: "double" },
+  { name: "2種ダブルハラペーニョエッグベーコンチーズ", price: 2600, cat: "double" },
 ];
 
 // 原価(cost)は仮に「単価の40%」として設定しています。
@@ -1554,6 +1553,7 @@ let eventNote = ""; // その日の状況(自由記入)
 let isReserved = false; // 現在の注文が予約品かどうか
 let reserveTime = ""; // 予約時間(現在の注文用)
 let reservationLog = []; // 本日確定した予約品ログ { time, items }
+let customSalesLog = []; // 本日確定したカスタム商品ログ { name, price }
 
 const yen = n => "¥" + n.toLocaleString("ja-JP");
 const escapeHtml = s => s.replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -1595,7 +1595,8 @@ function saveSalesState(){
       eventInfo,
       eventWeather,
       eventNote,
-      reservationLog
+      reservationLog,
+      customSalesLog
     }));
   } catch (e){
     console.error("保存に失敗しました", e);
@@ -1623,6 +1624,7 @@ function loadSalesState(){
     if (typeof data.eventWeather === "string") eventWeather = data.eventWeather;
     if (typeof data.eventNote === "string") eventNote = data.eventNote;
     if (Array.isArray(data.reservationLog)) reservationLog = data.reservationLog;
+    if (Array.isArray(data.customSalesLog)) customSalesLog = data.customSalesLog;
   } catch (e){
     console.error("読み込みに失敗しました", e);
   }
@@ -1651,6 +1653,7 @@ document.getElementById("resetModalConfirm").addEventListener("click", () => {
   eventWeather = "";
   eventNote = "";
   reservationLog = [];
+  customSalesLog = [];
   document.getElementById("eventInfo").value = "";
   document.getElementById("eventNote").value = "";
   renderWeatherSelect();
@@ -1717,7 +1720,6 @@ lockProfitBoard();
 const CATEGORIES = [
   { key: "single",  label: "SINGLE MENU" },
   { key: "double",  label: "DOUBLE MENU" },
-  { key: "limited", label: "TODAY'S MENU(数量限定)" },
 ];
 
 function itemRowHtml(item, i, count){
@@ -1735,7 +1737,7 @@ function itemRowHtml(item, i, count){
     </div>`;
 }
 
-let categoryCollapsed = { single: true, double: true, limited: true, topping: true };
+let categoryCollapsed = { single: false, double: false, topping: false };
 loadUiState();
 
 function renderMenu(){
@@ -2036,6 +2038,7 @@ document.getElementById("confirmBtn").addEventListener("click", () => {
     total += item.price;
     hasItems = true;
     itemSummary.push(item.name);
+    customSalesLog.push({ name: item.name, price: item.price });
   });
   if (!hasItems) return;
 
@@ -2241,6 +2244,14 @@ function buildMailBody(){
     }
   });
 
+  if (customSalesLog.length > 0){
+    lines.push("");
+    lines.push("--- カスタム商品 ---");
+    customSalesLog.forEach(c => {
+      lines.push(`${c.name}: ${yen(c.price)}`);
+    });
+  }
+
   if (reservationLog.length > 0){
     lines.push("");
     lines.push("--- 予約品 ---");
@@ -2282,6 +2293,14 @@ function buildExcelBlob(){
   rows.push(["粗利(円)", totalProfit]);
   const finalProfitRowIndex = rows.length;
   rows.push(["最終利益(円)", finalProfit]);
+
+  if (customSalesLog.length > 0){
+    rows.push([]);
+    rows.push(["カスタム商品", "金額(円)"]);
+    customSalesLog.forEach(c => {
+      rows.push([c.name, c.price]);
+    });
+  }
 
   if (reservationLog.length > 0){
     rows.push([]);
